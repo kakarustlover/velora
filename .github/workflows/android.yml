@@ -60,6 +60,8 @@ jobs:
           cargo test --lib --release
 
       - name: Build native library (arm64)
+        env:
+          ANDROID_PLATFORM: android-34
         run: cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release --lib
 
       - uses: gradle/actions/setup-gradle@v4
