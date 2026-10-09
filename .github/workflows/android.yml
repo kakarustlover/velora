@@ -8,6 +8,8 @@ on:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_PLATFORM: android-34
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
