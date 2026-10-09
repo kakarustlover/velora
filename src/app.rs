@@ -34,7 +34,7 @@ const SCAN_EVERY: Duration = Duration::from_secs(45);
 // Shared state (guarded by one mutex; callbacks only hold it briefly)
 // ------------------------------------------------------------------------------------------
 #[derive(Clone)]
-struct ListRow {
+struct Row {
     kind: i32,
     id: i64,
     title: String,
@@ -47,7 +47,7 @@ struct ListRow {
 struct Shared {
     tracks: Vec<TrackRow>,
     playlists: Vec<Playlist>,
-    view: Vec<ListRow>,
+    view: Vec<Row>,
     queue_ids: Vec<i64>, // ids of the queue the player currently uses (for highlighting / playlist play)
     tab: i32,
     query: String,
@@ -151,7 +151,7 @@ fn rebuild_view(s: &mut Shared) -> String {
                 for tid in &p.track_ids {
                     if let Some(&i) = by_id.get(tid) {
                         let t = &s.tracks[i];
-                        s.view.push(ListRow { kind: 0, id: t.id, title: t.title.clone(), sub: format!("{} - {}", t.artist, t.album), right: fmt_time(t.duration_ms.max(0) as u64), cover: t.cover_key.clone(), track_idx: Some(i) });
+                        s.view.push(Row { kind: 0, id: t.id, title: t.title.clone(), sub: format!("{} - {}", t.artist, t.album), right: fmt_time(t.duration_ms.max(0) as u64), cover: t.cover_key.clone(), track_idx: Some(i) });
                     }
                 }
             }
@@ -161,7 +161,7 @@ fn rebuild_view(s: &mut Shared) -> String {
             for (i, t) in s.tracks.iter().enumerate() {
                 if matches(t) {
                     total_ms += t.duration_ms;
-                    s.view.push(ListRow { kind: 0, id: t.id, title: t.title.clone(), sub: format!("{} - {}", t.artist, t.album), right: fmt_time(t.duration_ms.max(0) as u64), cover: t.cover_key.clone(), track_idx: Some(i) });
+                    s.view.push(Row { kind: 0, id: t.id, title: t.title.clone(), sub: format!("{} - {}", t.artist, t.album), right: fmt_time(t.duration_ms.max(0) as u64), cover: t.cover_key.clone(), track_idx: Some(i) });
                 }
             }
             if !s.view.is_empty() {
@@ -188,7 +188,7 @@ fn rebuild_view(s: &mut Shared) -> String {
             groups.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
             for (gi, (name, idxs)) in groups.iter().enumerate() {
                 let cover = idxs.iter().map(|i| s.tracks[*i].cover_key.clone()).find(|k| !k.is_empty()).unwrap_or_default();
-                s.view.push(ListRow { kind: if by_album { 1 } else { 2 }, id: gi as i64, title: name.clone(), sub: n_songs(idxs.len()), right: String::new(), cover, track_idx: None });
+                s.view.push(Row { kind: if by_album { 1 } else { 2 }, id: gi as i64, title: name.clone(), sub: n_songs(idxs.len()), right: String::new(), cover, track_idx: None });
             }
             let n = s.view.len();
             footer = if by_album { format!("{} {}", n, if n == 1 { "album" } else { "albums" }) } else { format!("{} {}", n, if n == 1 { "singer" } else { "singers" }) };
