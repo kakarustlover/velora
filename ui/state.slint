@@ -1,0 +1,145 @@
+// =============================================================================
+//  state.slint  -  the single contract between the UI (this folder) and Rust.
+//  Rust implements the callbacks (on_xxx) and pushes data with set_xxx.
+// =============================================================================
+
+// One visible list row (songs / albums / singers share the same look).
+export struct ListRow {
+    kind: int,       // 0 = song, 1 = album, 2 = singer
+    idx: int,        // global index inside the current list (used for taps)
+    id: int,         // database id (songs) or group index
+    title: string,
+    sub: string,
+    right: string,   // duration for songs
+    cover: string,   // cover cache key ("" = no embedded art -> themed placeholder)
+    hue: int,        // 0..359, only nudges the placeholder gradient angle
+}
+
+// A playlist card (2x2 cover mosaic + name + count).
+export struct PlCard {
+    id: int,
+    name: string,
+    sub: string,
+    k1: string, k2: string, k3: string, k4: string,
+    h1: int, h2: int, h3: int, h4: int,
+    n: int,          // number of songs (0 -> single empty placeholder)
+}
+
+// One selectable song inside the playlist editor.
+export struct PickRow {
+    idx: int,
+    title: string,
+    sub: string,
+    cover: string,
+    hue: int,
+    sel: bool,
+}
+
+export global AppState {
+    // ---- window / platform -------------------------------------------------
+    in-out property <length> win-w: 360px;
+    in-out property <length> win-h: 800px;
+    in-out property <length> safe-b: 0px;     // bottom system inset (gesture bar)
+    in-out property <length> safe-t: 0px;     // top system inset (status bar)
+    in-out property <angle> phase: 0deg;      // animation clock, driven by a Rust timer
+    in-out property <bool> splash: true;
+
+    // ---- appearance (persisted by Rust) -------------------------------------
+    in-out property <int> pal: 0;             // 0 blue 1 orange 2 bone 3 pistachio 4 violet 5 rose 6 teal 7 gold 8 graphite 9 wine
+    in-out property <bool> dark: false;
+    in-out property <int> wall: 0;            // 0 bokeh 1 aurora 2 silk 3 horizon 4 plain
+    in-out property <int> perf: 1;            // 0 Max, 1 Balanced, 2 Optimized
+    in-out property <int> cover-style: 0;     // 0 card 1 square 2 disc 3 circle 4 wide 5 frame
+    in-out property <int> eq-look: 0;         // 0 bars 1 spectrum 2 dots 3 thin 4 bold 5 off
+
+    // ---- library ------------------------------------------------------------
+    in-out property <int> tab: 0;             // 0 songs 1 albums 2 singers 3 playlists
+    in-out property <string> query: "";
+    in-out property <[ListRow]> rows: [];         // a small window (16 rows) of the full list
+    in-out property <int> first-row: 0;
+    in-out property <int> total-rows: 0;
+    in-out property <length> list-content-h: 0px;   // full scrollable height of the panel content
+    in-out property <string> footer: "";
+    in-out property <length> rows-offset: 0px;       // vertical offset of the rows (playlist detail header)
+    in-out property <[PlCard]> playlists: [];
+    in-out property <int> pl-view: -1;        // opened playlist id, -1 = playlist grid
+    in-out property <string> pl-title: "";
+    in-out property <string> pl-sub: "";
+
+    // ---- now playing ----------------------------------------------------------
+    in-out property <bool> has-track: false;
+    in-out property <string> np-title: "";
+    in-out property <string> np-artist: "";
+    in-out property <string> np-cover: "";
+    in-out property <int> np-hue: 210;
+    in-out property <int> np-id: -1;
+    in-out property <bool> playing: false;
+    in-out property <bool> shuffle: false;
+    in-out property <int> repeat: 0;          // 0 off 1 all 2 one
+    in-out property <bool> liked: false;
+    in-out property <string> t-cur: "0:00";
+    in-out property <string> t-dur: "0:00";
+    in-out property <float> progress: 0.0;    // 0..1
+    in-out property <angle> disc-angle: 0deg;
+    in-out property <bool> intro: false;      // true for the first 5 seconds of playback (orbit ring)
+
+    // ---- sheets (only the UI toggles these; Rust may close them) --------------
+    in-out property <bool> show-np: false;
+    in-out property <bool> show-appearance: false;
+    in-out property <bool> show-custom: false;
+    in-out property <bool> show-eq: false;
+    in-out property <int> more-kind: -1;      // -1 closed, 0 colors, 1 wallpapers, 2 covers, 3 eq looks
+
+    // ---- equalizer (real DSP lives in Rust) -----------------------------------
+    in-out property <bool> eq-on: true;
+    in-out property <[int]> eq-bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    in-out property <int> eq-bass: 0;
+    in-out property <int> eq-treble: 0;
+    in-out property <int> eq-pre: 0;
+    in-out property <int> eq-preset: 0;       // 0..7 presets, 8 = custom
+    in-out property <string> eq-curve: "";    // SVG path (viewbox 320x64) of the response curve
+    in-out property <string> eq-summary: "Flat · On";
+
+    // ---- playlist editor ---------------------------------------------------------
+    in-out property <bool> show-pl-editor: false;
+    in-out property <bool> pl-editing: false;
+    in-out property <string> pl-name: "";
+    in-out property <[PickRow]> pick-rows: [];
+    in-out property <string> pl-count: "0 selected";
+    in-out property <bool> pl-can-save: false;
+    in-out property <bool> pl-del-armed: false;
+
+    // ---- callbacks implemented in Rust --------------------------------------------
+    callback scrolled(length);                 // inner list scroll offset in px
+    callback row-tapped(int);
+    callback set-tab(int);
+    callback query-edited(string);
+    callback toggle-play();
+    callback next();
+    callback prev();
+    callback seek(float);
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback toggle-like();
+    callback set-pal(int);
+    callback set-dark(bool);
+    callback set-wall(int);
+    callback set-perf(int);
+    callback set-cover-style(int);
+    callback set-eq-look(int);
+    callback eq-band(int, int);
+    callback eq-knob(int, int);                // 0 bass, 1 treble, 2 preamp
+    callback eq-pick-preset(int);
+    callback eq-toggle();
+    callback eq-reset();
+    callback pl-open(int);
+    callback pl-new();
+    callback pl-edit();
+    callback pl-toggle-pick(int);
+    callback pl-name-edited(string);
+    callback pl-save();
+    callback pl-delete();
+    callback pl-play(bool);                    // true = shuffle
+    callback pl-close-editor();
+    pure callback cover-image(string) -> image;
+}

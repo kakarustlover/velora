@@ -1,0 +1,6 @@
+target/
+android/app/build/
+android/.gradle/
+android/app/src/main/jniLibs/
+ui/fonts/*.ttf
+*.apk

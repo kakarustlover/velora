@@ -1,0 +1,72 @@
+name: Build Velora APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust (stable) + Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK + platform
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Inter font (UI typeface)
+        run: |
+          mkdir -p ui/fonts
+          curl -L --fail -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip
+          unzip -q /tmp/inter.zip -d /tmp/inter
+          for w in Regular Medium SemiBold Bold ExtraBold; do
+            f=$(find /tmp/inter -name "Inter-$w.ttf" | head -1)
+            if [ -z "$f" ]; then echo "Inter-$w.ttf not found in the archive"; exit 1; fi
+            cp "$f" ui/fonts/
+          done
+          ls -l ui/fonts
+
+      - name: Unit tests (equalizer math, database, scanner, player queue)
+        continue-on-error: true   # informational: a failing test never blocks the APK
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libx11-dev libxcb1-dev libgl1-mesa-dev libwayland-dev
+          cargo test --lib --release
+
+      - name: Build native library (arm64)
+        run: cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release --lib
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Package APK
+        run: gradle -p android assembleRelease --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: velora-apk
+          path: android/app/build/outputs/apk/release/*.apk

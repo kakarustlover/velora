@@ -1,0 +1,660 @@
+import { Theme } from "theme.slint";
+import { AppState } from "state.slint";
+import { Ic } from "icons_data.slint";
+import { Pal } from "tokens.slint";
+import { Walls } from "walls.slint";
+
+// ---------------------------------------------------------------------------
+// Icon: renders one of the HTML <symbol> icons (24x24 viewBox) from Ic.*
+// stroke width scales with the icon size exactly like SVG does in the browser.
+// ---------------------------------------------------------------------------
+export component Icon inherits Path {
+    in property <string> d;
+    in property <color> c: Theme.tx;
+    in property <length> size: 24px;
+    in property <bool> filled: false;
+    width: size;
+    height: size;
+    viewbox-width: 24;
+    viewbox-height: 24;
+    commands: d;
+    fill: filled ? c : transparent;
+    stroke: filled ? transparent : c;
+    stroke-width: 1.9px * (size / 24px);
+    stroke-line-cap: round;
+    stroke-line-join: round;
+}
+
+// ---------------------------------------------------------------------------
+// Glass: the HTML ".gl" surface.
+//   backdrop  = pre-blurred + saturated wallpaper, aligned to the window
+//   fill      = linear-gradient(145deg, g1, g2)
+//   rim       = 1px --lo ring + 1px --hi highlight on the top edge
+//   Max mode  = extra specular highlight (closest possible to the SVG liquid glass)
+//   Optimized = flat translucent fill (no backdrop image, no shadow)
+// ---------------------------------------------------------------------------
+export component Glass inherits Rectangle {
+    in property <length> r: 22px;
+    in property <bool> frosted: true;
+    in property <bool> shadow: false;
+    in property <bool> rim: true;
+    in property <color> veil: transparent;
+    border-radius: r;
+    clip: true;
+    drop-shadow-blur: (shadow && !Theme.flat) ? 22px : 0px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-color: Theme.sh;
+
+    if frosted && !Theme.flat : Image {
+        x: -root.absolute-position.x;
+        y: -root.absolute-position.y;
+        width: AppState.win-w;
+        height: AppState.win-h;
+        source: Theme.blur-wall;
+        image-fit: cover;
+    }
+    Rectangle { background: veil; }
+    Rectangle { background: @linear-gradient(145deg, Theme.g1 0%, Theme.g2 100%); }
+    if Theme.max : Rectangle {
+        x: -root.width * 0.3;
+        y: -root.width * 0.75;
+        width: root.width * 1.2;
+        height: root.width * 1.2;
+        border-radius: self.width / 2;
+        background: @radial-gradient(circle, #ffffff52 0%, #ffffff00 100%);
+    }
+    if rim : Rectangle { border-radius: r; border-width: 1px; border-color: Theme.lo; }
+    if rim : Rectangle {
+        x: r * 0.6;
+        y: 0px;
+        width: root.width - r * 1.2;
+        height: 1px;
+        background: Theme.hi;
+    }
+    @children
+}
+
+// Round glass icon button (HTML ".gl.round").
+export component GButton inherits Glass {
+    in property <string> icon;
+    in property <length> size: 44px;
+    in property <length> icon-size: 22px;
+    in property <bool> filled-icon: false;
+    in property <color> icon-color: Theme.tx;
+    callback clicked();
+    width: size;
+    height: size;
+    r: size / 2;
+    opacity: ta.pressed ? 0.8 : 1.0;
+    animate opacity { duration: 120ms; }
+    Icon {
+        d: root.icon;
+        size: root.icon-size;
+        c: root.icon-color;
+        filled: root.filled-icon;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+// Transparent icon button without glass (HTML ".ghost").
+export component GhostButton inherits Rectangle {
+    in property <string> icon;
+    in property <length> size: 40px;
+    in property <length> icon-size: 21px;
+    in property <bool> filled-icon: false;
+    in property <color> icon-color: Theme.tx;
+    callback clicked();
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: ta.pressed ? Theme.g2 : transparent;
+    Icon {
+        d: root.icon;
+        size: root.icon-size;
+        c: root.icon-color;
+        filled: root.filled-icon;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+// ---------------------------------------------------------------------------
+// Switch (HTML ".sw2"): 56x32 pill, 26px knob
+// ---------------------------------------------------------------------------
+export component Switch inherits Rectangle {
+    in property <bool> on;
+    callback toggled();
+    width: 56px;
+    height: 32px;
+    border-radius: 16px;
+    background: Theme.track;
+    Rectangle {
+        border-radius: 16px;
+        background: @linear-gradient(135deg, Theme.a1 0%, Theme.a2 100%);
+        opacity: root.on ? 1.0 : 0.0;
+        animate opacity { duration: 220ms; }
+    }
+    Rectangle { border-radius: 16px; border-width: 1px; border-color: Theme.lo; }
+    Rectangle {
+        x: root.on ? 27px : 3px;
+        y: 3px;
+        width: 26px;
+        height: 26px;
+        border-radius: 13px;
+        background: #ffffff;
+        drop-shadow-blur: 6px;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: Theme.sh;
+        animate x { duration: 240ms; easing: ease-out; }
+    }
+    TouchArea { clicked => { root.toggled(); } }
+}
+
+// ---------------------------------------------------------------------------
+// Seek bar (HTML ".seek"): 3px track, solid 18px thumb, 48px touch height
+// ---------------------------------------------------------------------------
+export component SeekBar inherits Rectangle {
+    in property <float> value;
+    callback seeked(float);
+    property <bool> dragging: false;
+    property <float> drag-v: 0.0;
+    property <float> shown: dragging ? drag-v : value;
+    height: 48px;
+    Rectangle {
+        x: 0px;
+        y: (parent.height - 3px) / 2;
+        width: parent.width;
+        height: 3px;
+        border-radius: 1.5px;
+        background: Theme.track;
+        Rectangle {
+            width: parent.width * root.shown;
+            height: parent.height;
+            border-radius: 1.5px;
+            background: Theme.tx;
+        }
+    }
+    Rectangle {
+        x: root.shown * (root.width - 18px);
+        y: (root.height - 18px) / 2;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: Theme.tx;
+        drop-shadow-blur: 8px;
+        drop-shadow-offset-y: 2px;
+        drop-shadow-color: Theme.sh;
+    }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.dragging = true;
+                root.drag-v = Math.clamp(self.mouse-x / self.width, 0, 1);
+            }
+            if (e.kind == PointerEventKind.up) {
+                root.dragging = false;
+                root.seeked(Math.clamp(self.mouse-x / self.width, 0, 1));
+            }
+            if (e.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.drag-v = Math.clamp(self.mouse-x / self.width, 0, 1);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Horizontal slider with bipolar fill, range -12..12 (HTML ".sld")
+// ---------------------------------------------------------------------------
+export component HSlider inherits Rectangle {
+    in property <int> value;
+    callback value-changed(int);
+    height: 44px;
+    property <float> pos: (value + 12) / 24.0;
+    property <length> span: root.width - 22px;
+    Rectangle {
+        x: 0px;
+        y: (parent.height - 4px) / 2;
+        width: parent.width;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.track;
+    }
+    Rectangle {
+        x: root.pos >= 0.5 ? root.width / 2 : 11px + root.span * root.pos;
+        y: (root.height - 4px) / 2;
+        width: Math.abs(root.pos - 0.5) * root.span;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.ttl;
+    }
+    Rectangle {
+        x: root.span * root.pos;
+        y: (root.height - 22px) / 2;
+        width: 22px;
+        height: 22px;
+        border-radius: 11px;
+        background: @radial-gradient(circle, #ffffffe6 0%, #ffffff8c 100%);
+        border-width: 1px;
+        border-color: Theme.hi;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 3px;
+        drop-shadow-color: Theme.sh;
+    }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.value-changed(Math.round(Math.clamp((self.mouse-x - 11px) / root.span, 0, 1) * 24 - 12));
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.value-changed(Math.round(Math.clamp((self.mouse-x - 11px) / root.span, 0, 1) * 24 - 12));
+            }
+        }
+    }
+}
+
+// Vertical band slider for the equalizer (HTML ".vs" rotated): +12 on top.
+export component VSlider inherits Rectangle {
+    in property <int> value;
+    callback value-changed(int);
+    property <float> pos: (value + 12) / 24.0;
+    property <length> span: root.height - 22px;
+    Rectangle {
+        x: (parent.width - 4px) / 2;
+        y: 0px;
+        width: 4px;
+        height: parent.height;
+        border-radius: 2px;
+        background: Theme.track;
+    }
+    Rectangle {
+        x: (root.width - 4px) / 2;
+        y: root.pos >= 0.5 ? 11px + root.span * (1.0 - root.pos) : root.height / 2;
+        width: 4px;
+        height: Math.abs(root.pos - 0.5) * root.span;
+        border-radius: 2px;
+        background: Theme.ttl;
+    }
+    Rectangle {
+        x: (root.width - 22px) / 2;
+        y: root.span * (1.0 - root.pos);
+        width: 22px;
+        height: 22px;
+        border-radius: 11px;
+        background: @radial-gradient(circle, #ffffffe6 0%, #ffffff8c 100%);
+        border-width: 1px;
+        border-color: Theme.hi;
+        drop-shadow-blur: 10px;
+        drop-shadow-offset-y: 3px;
+        drop-shadow-color: Theme.sh;
+    }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.value-changed(Math.round((1.0 - Math.clamp((self.mouse-y - 11px) / root.span, 0, 1)) * 24 - 12));
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.value-changed(Math.round((1.0 - Math.clamp((self.mouse-y - 11px) / root.span, 0, 1)) * 24 - 12));
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cover tile: embedded art when available, otherwise the themed placeholder
+// (palette gradient + soft highlight + vinyl rings + note icon, as in the HTML).
+// ---------------------------------------------------------------------------
+export component CoverTile inherits Rectangle {
+    in property <string> key;
+    in property <int> hue;
+    in property <length> radius: 14px;
+    in property <length> icon-size: 22px;
+    in property <bool> rings: true;
+    border-radius: radius;
+    clip: true;
+    if key == "" : Rectangle {
+        background: @linear-gradient(100deg + (hue - 180) * 0.3deg, Theme.a1.brighter(0.5) 0%, Theme.a1 55%, Theme.a2 100%);
+        Rectangle {
+            x: -parent.width * 0.35;
+            y: -parent.width * 0.55;
+            width: parent.width * 1.1;
+            height: parent.width * 1.1;
+            border-radius: self.width / 2;
+            background: @radial-gradient(circle, #ffffff99 0%, #ffffff00 100%);
+        }
+        if rings : Rectangle {
+            x: parent.width * 0.5 - self.width / 2;
+            y: parent.height * 0.5 - self.height / 2;
+            width: parent.width * 0.78;
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: #ffffff40;
+        }
+        if rings : Rectangle {
+            x: parent.width * 0.5 - self.width / 2;
+            y: parent.height * 0.5 - self.height / 2;
+            width: parent.width * 0.54;
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: #ffffff40;
+        }
+        Icon {
+            d: Ic.note;
+            c: Theme.deep;
+            size: root.icon-size;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+        }
+    }
+    if key != "" : Image {
+        source: AppState.cover-image(key);
+        image-fit: cover;
+        width: root.width;
+        height: root.height;
+    }
+    Rectangle { border-radius: radius; border-width: 1px; border-color: #ffffff59; }
+}
+
+// ---------------------------------------------------------------------------
+// Sheet section label (HTML ".sect"): 13px / 700, margin 10 / 8
+// ---------------------------------------------------------------------------
+export component Sect inherits Rectangle {
+    in property <string> text;
+    height: 33px;
+    Text {
+        x: 4px;
+        y: 10px;
+        text: root.text;
+        font-size: 13px;
+        font-weight: 700;
+        color: Theme.smu;
+    }
+}
+
+// Check badge used by selected option cards.
+export component CheckBadge inherits Rectangle {
+    in property <bool> shown;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: Theme.tx;
+    opacity: shown ? 1.0 : 0.0;
+    animate opacity { duration: 200ms; }
+    Icon {
+        d: Ic.check;
+        c: Theme.b1;
+        size: 12px;
+        x: 3px;
+        y: 3px;
+    }
+}
+
+// Palette card: 40px round swatch + name (HTML ".card3").
+export component PalCard inherits Rectangle {
+    in property <int> idx;
+    in property <bool> selected;
+    in property <bool> more: false;
+    in property <string> label;
+    callback tapped();
+    property <length> pv-y: root.height > 85px ? 12px : 10px;
+    border-radius: 22px;
+    Rectangle { border-radius: 22px; background: Theme.g2; }
+    Rectangle {
+        border-radius: 22px;
+        border-width: root.selected ? 2px : 0.5px;
+        border-color: root.selected ? Theme.tx : Theme.lo;
+    }
+    if !more : Rectangle {
+        x: (parent.width - 40px) / 2;
+        y: root.pv-y;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        clip: true;
+        background: @linear-gradient(145deg, Pal.a1[root.idx * 2] 0%, Pal.a2[root.idx * 2] 100%);
+        Rectangle {
+            x: -8px;
+            y: -14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 17px;
+            background: @radial-gradient(circle, #ffffffd9 0%, #ffffff00 100%);
+        }
+    }
+    if more : Rectangle {
+        x: (parent.width - 40px) / 2;
+        y: root.pv-y;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: Theme.g2;
+        border-width: 0.5px;
+        border-color: Theme.lo;
+        Icon {
+            d: Ic.more;
+            c: Theme.smu;
+            size: 20px;
+            x: 10px;
+            y: 10px;
+        }
+    }
+    Text {
+        y: root.pv-y + 48px;
+        width: parent.width;
+        height: 16px;
+        text: root.label;
+        horizontal-alignment: center;
+        font-size: 14px;
+        font-weight: root.selected ? 800 : 600;
+        color: root.selected ? Theme.tx : Theme.smu;
+        overflow: elide;
+    }
+    CheckBadge { x: parent.width - 24px; y: 6px; shown: root.selected && !root.more; }
+    TouchArea { clicked => { root.tapped(); } }
+}
+
+// Wallpaper card: thumbnail of the active palette + name (HTML ".bgcard").
+export component WallCard inherits Rectangle {
+    in property <int> style;
+    in property <bool> selected;
+    in property <bool> more: false;
+    in property <string> label;
+    callback tapped();
+    property <length> th: root.height - 25px;
+    Rectangle {
+        width: parent.width;
+        height: root.th;
+        border-radius: 16px;
+        clip: true;
+        background: Theme.g2;
+        if !more : Image {
+            width: parent.width;
+            height: parent.height;
+            source: Walls.full[root.style * 20 + (AppState.pal * 2 + (AppState.dark ? 1 : 0))];
+            image-fit: cover;
+        }
+        if more : Icon {
+            d: Ic.more;
+            c: Theme.smu;
+            size: 24px;
+            x: (parent.width - 24px) / 2;
+            y: (parent.height - 24px) / 2;
+        }
+        Rectangle {
+            border-radius: 16px;
+            border-width: root.selected ? 2px : 0.5px;
+            border-color: root.selected ? Theme.tx : Theme.hi;
+        }
+    }
+    Text {
+        y: root.height - 18px;
+        width: parent.width;
+        height: 16px;
+        text: root.label;
+        horizontal-alignment: center;
+        font-size: 13px;
+        font-weight: root.selected ? 800 : 600;
+        color: root.selected ? Theme.tx : Theme.smu;
+        overflow: elide;
+    }
+    CheckBadge { x: parent.width - 24px; y: 6px; shown: root.selected && !root.more; }
+    TouchArea { clicked => { root.tapped(); } }
+}
+
+// Little outline glyph that previews a cover style / equalizer look / perf mode.
+export component OptGlyph inherits Rectangle {
+    in property <int> group;     // 0 = cover styles, 1 = equalizer looks, 2 = performance, 3 = more
+    in property <int> k;
+    in property <color> c: Theme.smu;
+    width: 46px;
+    height: 44px;
+    // cover styles: 0 card 1 square 2 disc 3 circle 4 wide 5 frame
+    if group == 0 : Rectangle {
+        width: k == 0 ? 44px : (k == 4 ? 46px : (k == 5 ? 36px : (k == 1 ? 36px : 38px)));
+        height: k == 0 ? 36px : (k == 4 ? 30px : (k == 5 ? 40px : (k == 1 ? 36px : 38px)));
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: (k == 2 || k == 3) ? self.width / 2 : (k == 5 ? 7px : 9px);
+        border-width: 2px;
+        border-color: root.c;
+        if k == 2 : Rectangle {
+            x: 11px;
+            y: 11px;
+            width: parent.width - 22px - 4px;
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 2px;
+            border-color: root.c;
+        }
+    }
+    property <[int]> dots-dy: [6, -4, -10, -2, 5];
+    // equalizer looks: 0 bars 1 spectrum 2 dots 3 thin 4 bold
+    if group == 1 && k < 5 : Rectangle {
+        for h[j] in [10, 20, 28, 16, 12] : Rectangle {
+            x: (parent.width - 28px) / 2 + j * 6px - (k == 4 ? 1px : 0px);
+            width: k == 3 ? 2px : (k == 4 ? 5px : (k == 2 ? 5px : 4px));
+            height: k == 2 ? 5px : h * 1px;
+            y: k == 1 ? (parent.height + 30px) / 2 - self.height : ((parent.height - self.height) / 2 + (k == 2 ? dots-dy[j] * 1px : 0px));
+            border-radius: self.width / 2;
+            background: root.c;
+        }
+    }
+    if group == 1 && k == 5 : Icon { d: Ic.x; c: root.c; size: 22px; x: 12px; y: 11px; }
+    if group == 2 : Icon {
+        d: k == 0 ? Ic.sun : (k == 1 ? Ic.ff : Ic.bolt);
+        c: root.c;
+        size: 22px;
+        x: 12px;
+        y: 11px;
+        filled: k == 2;
+    }
+    if group == 3 : Icon { d: Ic.more; c: root.c; size: 22px; x: 12px; y: 11px; }
+}
+
+// Option card (HTML ".opt3"): glyph + label + check.
+export component OptCard inherits Rectangle {
+    in property <int> group;
+    in property <int> k;
+    in property <string> label;
+    in property <bool> selected;
+    callback tapped();
+    border-radius: 18px;
+    Rectangle { border-radius: 18px; background: Theme.g2; }
+    Rectangle {
+        border-radius: 18px;
+        border-width: root.selected ? 2px : 0.5px;
+        border-color: root.selected ? Theme.tx : Theme.lo;
+    }
+    OptGlyph {
+        group: root.group;
+        k: root.k;
+        c: root.selected ? Theme.tx : Theme.smu;
+        x: (parent.width - self.width) / 2;
+        y: 6px;
+    }
+    Text {
+        y: 52px;
+        width: parent.width;
+        height: 16px;
+        text: root.label;
+        horizontal-alignment: center;
+        font-size: 13px;
+        font-weight: root.selected ? 800 : 600;
+        color: root.selected ? Theme.tx : Theme.smu;
+        overflow: elide;
+    }
+    CheckBadge { x: parent.width - 24px; y: 6px; shown: root.selected && root.group != 3; }
+    TouchArea { clicked => { root.tapped(); } }
+}
+
+// Row with icon circle + title + subtitle + trailing content (HTML ".mrow").
+export component ModeRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> title;
+    in property <string> sub;
+    in property <bool> chevron: false;
+    in property <bool> two-line: false;
+    height: two-line ? 69px : 60px;
+    border-radius: 22px;
+    Rectangle { border-radius: 22px; background: Theme.g2; }
+    Rectangle { border-radius: 22px; border-width: 0.5px; border-color: Theme.lo; }
+    Rectangle {
+        x: 14px;
+        y: (parent.height - 40px) / 2;
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+        background: @linear-gradient(145deg, Theme.g1 0%, Theme.g2 100%);
+        border-width: 0.5px;
+        border-color: Theme.lo;
+        Icon {
+            d: root.icon;
+            c: Theme.smu;
+            size: 20px;
+            x: 10px;
+            y: 10px;
+        }
+    }
+    Text {
+        x: 66px;
+        y: root.sub == "" ? (parent.height - 19px) / 2 : (root.two-line ? 15px : 11.5px);
+        width: parent.width - 66px - 80px;
+        height: 19px;
+        text: root.title;
+        font-size: 16px;
+        font-weight: 700;
+        color: Theme.tx;
+        overflow: elide;
+    }
+    if root.sub != "" : Text {
+        x: 66px;
+        y: root.two-line ? 35px : 32px;
+        width: parent.width - 66px - 80px;
+        height: 30px;
+        text: root.sub;
+        font-size: 13px;
+        color: Theme.smu;
+        wrap: word-wrap;
+    }
+    if chevron : Icon {
+        d: Ic.chev;
+        c: Theme.smu;
+        size: 20px;
+        x: parent.width - 34px;
+        y: (parent.height - 20px) / 2;
+    }
+    @children
+}

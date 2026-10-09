@@ -1,0 +1,41 @@
+import { Pal } from "tokens.slint";
+import { Walls } from "walls.slint";
+import { AppState } from "state.slint";
+
+// Resolves every design token of the HTML (--a1, --g1, --tx ...) for the active
+// palette + light/dark mode. Values come from tokens.slint (generated from the HTML).
+export global Theme {
+    property <int> i: AppState.pal * 2 + (AppState.dark ? 1 : 0);
+
+    out property <color> a1: Pal.a1[i];
+    out property <color> a2: Pal.a2[i];
+    out property <color> b1: Pal.b1[i];
+    out property <color> b2: Pal.b2[i];
+    out property <color> deep: Pal.deep[i];
+    out property <color> acc1: Pal.acc1[i];
+    out property <color> acc2: Pal.acc2[i];
+    out property <color> acct: Pal.acct[i];
+    out property <color> g1: Pal.g1[i];
+    out property <color> g2: Pal.g2[i];
+    out property <color> hi: Pal.hi[i];
+    out property <color> lo: Pal.lo[i];
+    out property <color> sh: Pal.sh[i];
+    out property <color> tx: Pal.tx[i];
+    out property <color> mu: Pal.mu[i];
+    out property <color> smu: Pal.smu[i];
+    out property <color> track: Pal.track[i];
+    out property <color> lp: Pal.lp[i];
+    out property <color> ttl: Pal.ttl[i];
+    out property <color> like: Pal.like[i];
+    out property <color> sheet: Pal.sheet[i];
+
+    out property <image> wall: Walls.full[AppState.wall * 20 + i];
+    out property <image> blur-wall: Walls.blur[AppState.wall * 20 + i];
+    out property <image> disc: Walls.disc[i];
+
+    out property <color> dark-veil: AppState.dark ? #080a0e52 : #00000000;
+
+    // performance modes: 0 = Max, 1 = Balanced, 2 = Optimized (flat, no backdrop images, no shadows)
+    out property <bool> max: AppState.perf == 0;
+    out property <bool> flat: AppState.perf == 2;
+}
